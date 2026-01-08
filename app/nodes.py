@@ -10,19 +10,22 @@ model = ChatGoogleGenerativeAI(
     google_api_key=os.getenv("GOOGLE_API_KEY") # 也可以手動指定確保抓到
 )
 
+from langchain_core.messages import SystemMessage, HumanMessage
+
 def analyze_sentiment(state: AgentState):
-    user_msg = state["messages"][-1].content.lower()
+    user_msg = state["messages"][-1].content  # 取得使用者最後一句話
     
-    # 簡單的情緒判斷邏輯
-    if any(word in user_msg for word in ["高興", "開心", "棒", "good", "happy"]):
-        sentiment = "正面"
-    elif any(word in user_msg for word in ["生氣", "難過", "差", "bad", "angry"]):
-        sentiment = "負面"
-    else:
-        sentiment = "中性"
+    # 建立一個專門分析情緒的 Prompt
+    prompt = [
+        SystemMessage(content="你是一個情緒分析專家。請分析使用者的輸入，只回傳：'正面'、'負面' 或 '中性'。不要解釋，只要這兩個字。"),
+        HumanMessage(content=user_msg)
+    ]
     
-    print(f"--- 系統日誌：偵測到情緒為 {sentiment} ---")
-    # 回傳 sentiment，LangGraph 會自動更新 state
+    # 使用你定義好的 model (例如 ChatOpenAI 或 ChatGoogleGenerativeAI)
+    response = model.invoke(prompt)
+    sentiment = response.content.strip()
+    
+    print(f"--- 系統日誌：LLM 判定情緒為 {sentiment} ---")
     return {"sentiment": sentiment}
 
 def call_model(state: AgentState):
