@@ -1,6 +1,5 @@
 import os
 from dotenv import load_dotenv
-from langchain_openai import ChatOpenAI
 from .state import AgentState
 
 load_dotenv() # 自動抓取 .env 裡面的 KEY
@@ -10,26 +9,26 @@ model = ChatGoogleGenerativeAI(
     google_api_key=os.getenv("GOOGLE_API_KEY") # 也可以手動指定確保抓到
 )
 
-def analyze_sentiment(state: AgentState):
-    user_msg = state["messages"][-1].content.lower()
-    
-    # 簡單的情緒判斷邏輯
-    if any(word in user_msg for word in ["高興", "開心", "棒", "good", "happy"]):
-        sentiment = "正面"
-    elif any(word in user_msg for word in ["生氣", "難過", "差", "bad", "angry"]):
-        sentiment = "負面"
-    else:
-        sentiment = "中性"
-    
-    print(f"--- 系統日誌：偵測到情緒為 {sentiment} ---")
-    # 回傳 sentiment，LangGraph 會自動更新 state
-    return {"sentiment": sentiment}
+from langchain_community.tools.tavily_search import TavilyAnswer
+from langchain_core.tools import tool
 
+# 定義一個專門查藥物禁忌的工具
+@tool
+def search_drug_info(query: str):
+    """
+    當需要查詢藥品成分、藥物禁忌或藥物與食物的交互作用時，使用此工具。
+    輸入應該是具體的藥名或問題，例如「阿斯匹靈 禁忌」。
+    """
+    from langchain_community.tools.tavily_search import TavilySearchResults
+    search = TavilySearchResults(max_results=2) # 抓取最相關的 2 則資料
+    return search.invoke(query)
+
+# 綁定工具到模型
+tools = [search_drug_info]
+model_with_tools = model.bind_tools(tools)
+
+# 修改 call_model 節點
 def call_model(state: AgentState):
-    # 你甚至可以根據情緒調整 prompt
-    sentiment = state.get("sentiment", "未知")
-    prompt = f"使用者的情緒是 {sentiment}。請以此心情回應。"
-    
-    # 將 prompt 放入訊息流中
-    response = model.invoke(state["messages"] + [("system", prompt)])
+    # 讓模型決定是否要用搜尋工具
+    response = model_with_tools.invoke(state["messages"])
     return {"messages": [response]}
